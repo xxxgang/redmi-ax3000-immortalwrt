@@ -39,36 +39,43 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-openwrt-dl-
 
-      - name: 注入自定义配置 (合并 files 目录)
+      - name: 注入自定义配置与开机自启脚本
         run: |
-          [ -d "files" ] && cp -r files openwrt/files || echo "未检测到 files 目录，跳过配置注入"
+          [ -d "files" ] && cp -r files openwrt/files || echo "未检测到 files 目录"
+          
+          # 利用 printf 规避 YAML heredoc 缩进陷阱，同时写入 enable 与 start 确保初次启动生效
+          mkdir -p openwrt/files/etc/uci-defaults
+          printf '#!/bin/sh\n/etc/init.d/sing-box enable\n/etc/init.d/sing-box start\nexit 0\n' > openwrt/files/etc/uci-defaults/99-enable-singbox
+          chmod +x openwrt/files/etc/uci-defaults/99-enable-singbox
 
-      - name: 生成编译配置 (.config)
+      - name: 生成编译配置 (.config) 并严格校验
         run: |
           cd openwrt
-
-          # 基础机型配置: 红米 AX3000
+          
           echo "CONFIG_TARGET_ipq50xx=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm_DEVICE_redmi_ax3000=y" >> .config
-
-          # 开启 CCache 缓存加速
+          
           echo "CONFIG_CCACHE=y" >> .config
-
-          # 开启 ZRAM (256M 内存保命配置)
+          
+          # 内存与底层网络支持
           echo "CONFIG_PACKAGE_zram-swap=y" >> .config
           echo "CONFIG_PACKAGE_kmod-zram=y" >> .config
-
-          # 基础 Web 界面与中文语言包
+          echo "CONFIG_PACKAGE_kmod-tun=y" >> .config
+          
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
           echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
           echo "CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y" >> .config
-
-          # 核心代理组件: 仅安装 sing-box
+          
           echo "CONFIG_PACKAGE_sing-box=y" >> .config
-
+          
           make defconfig
+          
+          # 检查防呆机制：防止包名错误被 defconfig 静默过滤，缺失直接中断编译 (exit 1)
+          echo ">>> 开始校验核心依赖是否成功载入 .config <<<"
+          grep -q "CONFIG_PACKAGE_kmod-tun=y" .config && echo "kmod-tun OK" || (echo "kmod-tun MISSING" && exit 1)
+          grep -q "CONFIG_PACKAGE_sing-box=y" .config && echo "sing-box OK" || (echo "sing-box MISSING" && exit 1)
 
       - name: 下载依赖包
         run: |
