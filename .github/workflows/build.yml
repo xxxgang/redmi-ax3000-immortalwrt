@@ -5,7 +5,7 @@ on:
 
 env:
   REPO_URL: https://github.com/kmiit/Redmi_AX3000_immortalwrt.git
-  REPO_BRANCH: master
+  REPO_BRANCH: redmi_ax3000-24.10
   TZ: Asia/Shanghai
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
       - name: 检出当前仓库代码
         uses: actions/checkout@v4
 
-      - name: 释放云端磁盘空间 (避免爆盘)
+      - name: 释放云端磁盘空间
         run: |
           sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo docker image prune --all --force
@@ -31,7 +31,7 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 缓存下载的源码包 (大幅提升二次编译速度)
+      - name: 缓存下载的源码包
         uses: actions/cache@v4
         with:
           path: openwrt/dl
@@ -46,29 +46,28 @@ jobs:
       - name: 生成编译配置 (.config)
         run: |
           cd openwrt
-          
+
           # 基础机型配置: 红米 AX3000
           echo "CONFIG_TARGET_ipq50xx=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm_DEVICE_redmi_ax3000=y" >> .config
-          
+
           # 开启 CCache 缓存加速
           echo "CONFIG_CCACHE=y" >> .config
-          
+
           # 开启 ZRAM (256M 内存保命配置)
           echo "CONFIG_PACKAGE_zram-swap=y" >> .config
           echo "CONFIG_PACKAGE_kmod-zram=y" >> .config
-          
+
           # 基础 Web 界面与中文语言包
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
           echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
           echo "CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y" >> .config
-          
+
           # 核心代理组件: 仅安装 sing-box
           echo "CONFIG_PACKAGE_sing-box=y" >> .config
-          # echo "CONFIG_PACKAGE_luci-app-sing-box=y" >> .config # 若需图形界面可取消注释
-          
+
           make defconfig
 
       - name: 下载依赖包
