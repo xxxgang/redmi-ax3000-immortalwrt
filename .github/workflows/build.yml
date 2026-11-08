@@ -52,9 +52,9 @@ jobs:
         run: |
           cd openwrt
           
-          echo "CONFIG_TARGET_ipq50xx=y" >> .config
-          echo "CONFIG_TARGET_ipq50xx_arm=y" >> .config
-          echo "CONFIG_TARGET_ipq50xx_arm_DEVICE_redmi_ax3000=y" >> .config
+          echo "CONFIG_TARGET_qualcommax=y" >> .config
+          echo "CONFIG_TARGET_qualcommax_ipq50xx=y" >> .config
+          echo "CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_redmi_ax3000=y" >> .config
           
           echo "CONFIG_CCACHE=y" >> .config
           
@@ -72,8 +72,9 @@ jobs:
           
           make defconfig
           
-          # 检查防呆机制：防止包名错误被 defconfig 静默过滤，缺失直接中断编译 (exit 1)
+          # 检查防呆机制：防止包名或 target 错误被 defconfig 静默过滤，缺失直接中断编译 (exit 1)
           echo ">>> 开始校验核心依赖是否成功载入 .config <<<"
+          grep -q "CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_redmi_ax3000=y" .config && echo "target OK" || (echo "target MISSING" && exit 1)
           grep -q "CONFIG_PACKAGE_kmod-tun=y" .config && echo "kmod-tun OK" || (echo "kmod-tun MISSING" && exit 1)
           grep -q "CONFIG_PACKAGE_sing-box=y" .config && echo "sing-box OK" || (echo "sing-box MISSING" && exit 1)
 
@@ -91,7 +92,7 @@ jobs:
 
       - name: 提取精简版刷机包
         run: |
-          cd openwrt/bin/targets/ipq50xx/arm
+          cd openwrt/bin/targets/qualcommax/ipq50xx
           mkdir -p firmware_release
           cp *redmi_ax3000*.ubi firmware_release/ 2>/dev/null || true
           cp *redmi_ax3000*.bin firmware_release/ 2>/dev/null || true
@@ -100,4 +101,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Redmi-AX3000-SingBox-Firmware
-          path: openwrt/bin/targets/ipq50xx/arm/firmware_release/
+          path: openwrt/bin/targets/qualcommax/ipq50xx/firmware_release/
