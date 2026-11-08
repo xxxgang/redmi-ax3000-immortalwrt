@@ -1,4 +1,4 @@
-name: Build Redmi AX3000 Optimized
+name: Build Redmi AX3000 (Sing-Box Only)
 
 on:
   workflow_dispatch:
@@ -12,10 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 检出仓库代码 (用于读取 files 预置目录)
+      - name: 检出当前仓库代码
         uses: actions/checkout@v4
 
-      - name: 释放磁盘空间 (极其关键)
+      - name: 释放云端磁盘空间 (避免爆盘)
         run: |
           sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo docker image prune --all --force
@@ -24,14 +24,14 @@ jobs:
           gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget ccache
           sudo apt-get autoremove --purge -y && sudo apt-get clean
 
-      - name: 拉取 OpenWrt 源码
+      - name: 拉取 ImmortalWrt 源码
         run: |
           git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 缓存下载的源码包 (提速)
+      - name: 缓存下载的源码包 (大幅提升二次编译速度)
         uses: actions/cache@v4
         with:
           path: openwrt/dl
@@ -39,25 +39,35 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-openwrt-dl-
 
-      - name: 注入自定义配置 (将仓库根目录的 files 复制到系统中)
+      - name: 注入自定义配置 (合并 files 目录)
         run: |
-          [ -d "files" ] && cp -r files openwrt/files || echo "未检测到 files 目录，跳过预置配置"
+          [ -d "files" ] && cp -r files openwrt/files || echo "未检测到 files 目录，跳过配置注入"
 
-      - name: 载入预设配置 (.config)
+      - name: 生成编译配置 (.config)
         run: |
           cd openwrt
+          
+          # 基础机型配置: 红米 AX3000
           echo "CONFIG_TARGET_ipq50xx=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm=y" >> .config
           echo "CONFIG_TARGET_ipq50xx_arm_DEVICE_redmi_ax3000=y" >> .config
           
-          # 开启 CCache 编译缓存
+          # 开启 CCache 缓存加速
           echo "CONFIG_CCACHE=y" >> .config
           
-          # 核心网络组件与界面
+          # 开启 ZRAM (256M 内存保命配置)
+          echo "CONFIG_PACKAGE_zram-swap=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-zram=y" >> .config
+          
+          # 基础 Web 界面与中文语言包
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
+          echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
+          echo "CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y" >> .config
+          
+          # 核心代理组件: 仅安装 sing-box
           echo "CONFIG_PACKAGE_sing-box=y" >> .config
-          echo "CONFIG_PACKAGE_xray-core=y" >> .config
+          # echo "CONFIG_PACKAGE_luci-app-sing-box=y" >> .config # 若需图形界面可取消注释
           
           make defconfig
 
@@ -65,26 +75,23 @@ jobs:
         run: |
           cd openwrt
           make download -j8
-          # 删除有缺陷的空包
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
       - name: 编译固件
         run: |
           cd openwrt
-          # 优先使用多线程，失败则自动回退到单线程输出错误日志
           make -j$(nproc) || make -j1 V=s
 
-      - name: 整理并提取最终刷机包
+      - name: 提取精简版刷机包
         run: |
           cd openwrt/bin/targets/ipq50xx/arm
           mkdir -p firmware_release
-          # 仅提取核心刷机文件，抛弃临时组件
           cp *redmi_ax3000*.ubi firmware_release/ 2>/dev/null || true
           cp *redmi_ax3000*.bin firmware_release/ 2>/dev/null || true
 
-      - name: 上传精简版固件到 Artifacts
+      - name: 上传固件至 Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Redmi-AX3000-Optimized-Firmware
+          name: Redmi-AX3000-SingBox-Firmware
           path: openwrt/bin/targets/ipq50xx/arm/firmware_release/
